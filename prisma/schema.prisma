@@ -1,17 +1,82 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-enum Role { admin directeur commercial magasinier comptable }
-enum StatutProduit { disponible stock_faible rupture sur_commande stock_permanent inactif }
-enum TypeClient { standard revendeur grossiste }
-enum StatutCommercial { prospect nouveau actif inactif a_relancer }
-enum StatutProforma { brouillon envoyee acceptee refusee expiree convertie }
-enum StatutCommande { en_attente confirmee preparee livree annulee }
-enum StatutLivraison { non_livre partielle livre }
-enum StatutPaiement { impayee partielle payee }
-enum TypeMouvement { entree sortie ajustement }
-enum TypeActivite { appel whatsapp email rdv relance note }
-enum StatutAchat { commande recu_partiel recu annule }
+enum Role {
+  admin
+  directeur
+  commercial
+  magasinier
+  comptable
+}
+enum StatutProduit {
+  disponible
+  stock_faible
+  rupture
+  sur_commande
+  stock_permanent
+  inactif
+}
+enum TypeClient {
+  standard
+  revendeur
+  grossiste
+}
+enum StatutCommercial {
+  prospect
+  nouveau
+  actif
+  inactif
+  a_relancer
+}
+enum StatutProforma {
+  brouillon
+  envoyee
+  acceptee
+  refusee
+  expiree
+  convertie
+}
+enum StatutCommande {
+  en_attente
+  confirmee
+  preparee
+  livree
+  annulee
+}
+enum StatutLivraison {
+  non_livre
+  partielle
+  livre
+}
+enum StatutPaiement {
+  impayee
+  partielle
+  payee
+}
+enum TypeMouvement {
+  entree
+  sortie
+  ajustement
+}
+enum TypeActivite {
+  appel
+  whatsapp
+  email
+  rdv
+  relance
+  note
+}
+enum StatutAchat {
+  commande
+  recu_partiel
+  recu
+  annule
+}
 
 model Utilisateur {
   id        Int      @id @default(autoincrement())
