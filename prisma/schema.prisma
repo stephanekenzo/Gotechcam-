@@ -1,0 +1,312 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+enum Role { admin directeur commercial magasinier comptable }
+enum StatutProduit { disponible stock_faible rupture sur_commande stock_permanent inactif }
+enum TypeClient { standard revendeur grossiste }
+enum StatutCommercial { prospect nouveau actif inactif a_relancer }
+enum StatutProforma { brouillon envoyee acceptee refusee expiree convertie }
+enum StatutCommande { en_attente confirmee preparee livree annulee }
+enum StatutLivraison { non_livre partielle livre }
+enum StatutPaiement { impayee partielle payee }
+enum TypeMouvement { entree sortie ajustement }
+enum TypeActivite { appel whatsapp email rdv relance note }
+enum StatutAchat { commande recu_partiel recu annule }
+
+model Utilisateur {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  email     String   @unique
+  motDePasse String
+  role      Role     @default(commercial)
+  actif     Boolean  @default(true)
+  creeLe    DateTime @default(now())
+  proformas Proforma[]
+  activites ActiviteCrm[]
+}
+
+model Categorie {
+  id         Int    @id @default(autoincrement())
+  nom        String
+  prefixeSku String
+  ordre      Int    @default(0)
+  sousCategories SousCategorie[]
+  produits   Produit[]
+}
+
+model SousCategorie {
+  id          Int       @id @default(autoincrement())
+  nom         String
+  categorieId Int
+  categorie   Categorie @relation(fields: [categorieId], references: [id])
+  produits    Produit[]
+}
+
+model Produit {
+  id              Int            @id @default(autoincrement())
+  sku             String         @unique
+  nom             String
+  description     String?
+  marque          String?
+  modele          String?
+  unite           String         @default("pièce")
+  prixAchat       Int?
+  prixVente       Int            @default(0)
+  prixRevendeur   Int?
+  prixGrossiste   Int?
+  stock           Int            @default(0)
+  seuilAlerte     Int            @default(5)
+  emplacement     String?
+  statut          StatutProduit  @default(disponible)
+  categorieId     Int
+  categorie       Categorie      @relation(fields: [categorieId], references: [id])
+  sousCategorieId Int?
+  sousCategorie   SousCategorie? @relation(fields: [sousCategorieId], references: [id])
+  creeLe          DateTime       @default(now())
+  majLe           DateTime       @updatedAt
+  mouvements      MouvementStock[]
+  besoins         BesoinClient[]
+  @@index([categorieId])
+  @@index([statut])
+}
+
+model Client {
+  id               Int              @id @default(autoincrement())
+  nom              String
+  typeClient       TypeClient       @default(standard)
+  statutCommercial StatutCommercial @default(nouveau)
+  secteur          String?
+  contact          String?
+  telephone        String?
+  whatsapp         String?
+  email            String?
+  ville            String?
+  adresse          String?
+  rc               String?
+  niu              String?
+  notes            String?
+  creeLe           DateTime         @default(now())
+  proformas        Proforma[]
+  commandes        Commande[]
+  factures         Facture[]
+  activites        ActiviteCrm[]
+  relances         Relance[]
+  besoins          BesoinClient[]
+  @@index([statutCommercial])
+}
+
+/// Catalogue des besoins récurrents par client — base des relances proactives
+model BesoinClient {
+  id            Int      @id @default(autoincrement())
+  clientId      Int
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  produitId     Int?
+  produit       Produit? @relation(fields: [produitId], references: [id])
+  libelle       String
+  quantiteTypique Int    @default(1)
+  frequenceJours Int?    // ex: 60 = tous les 2 mois
+  dernierAchat  DateTime?
+  prochainRappel DateTime?
+  actif         Boolean  @default(true)
+  notes         String?
+  creeLe        DateTime @default(now())
+  @@index([clientId])
+  @@index([prochainRappel])
+}
+
+model Proforma {
+  id         Int             @id @default(autoincrement())
+  numero     String          @unique
+  clientId   Int
+  client     Client          @relation(fields: [clientId], references: [id])
+  statut     StatutProforma  @default(brouillon)
+  total      Int             @default(0)
+  retenuePct Float           @default(2.2)
+  note       String?
+  pdfDemande String?
+  creeParId  Int?
+  creePar    Utilisateur?    @relation(fields: [creeParId], references: [id])
+  creeLe     DateTime        @default(now())
+  lignes     ProformaLigne[]
+  commandes  Commande[]
+  @@index([clientId])
+}
+
+model ProformaLigne {
+  id         Int      @id @default(autoincrement())
+  proformaId Int
+  proforma   Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  produitId  Int?
+  nomProduit String
+  unite      String   @default("pièce")
+  quantite   Int      @default(1)
+  prixUnit   Int
+}
+
+model Commande {
+  id              Int             @id @default(autoincrement())
+  numero          String          @unique
+  proformaId      Int?
+  proforma        Proforma?       @relation(fields: [proformaId], references: [id])
+  clientId        Int
+  client          Client          @relation(fields: [clientId], references: [id])
+  statut          StatutCommande  @default(en_attente)
+  statutLivraison StatutLivraison @default(non_livre)
+  total           Int             @default(0)
+  note            String?
+  pdfBc           String?
+  creeLe          DateTime        @default(now())
+  lignes          CommandeLigne[]
+  factures        Facture[]
+  livraisons      Livraison[]
+  @@index([clientId])
+}
+
+model CommandeLigne {
+  id         Int      @id @default(autoincrement())
+  commandeId Int
+  commande   Commande @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+  produitId  Int?
+  nomProduit String
+  unite      String   @default("pièce")
+  quantite   Int      @default(1)
+  prixUnit   Int
+}
+
+model Facture {
+  id             Int            @id @default(autoincrement())
+  numero         String         @unique
+  commandeId     Int?
+  commande       Commande?      @relation(fields: [commandeId], references: [id])
+  clientId       Int
+  client         Client         @relation(fields: [clientId], references: [id])
+  statutPaiement StatutPaiement @default(impayee)
+  total          Int            @default(0)
+  retenuePct     Float          @default(2.2)
+  montantPaye    Int            @default(0)
+  note           String?
+  creeLe         DateTime       @default(now())
+  lignes         FactureLigne[]
+  paiements      Paiement[]
+  @@index([clientId])
+}
+
+model FactureLigne {
+  id         Int     @id @default(autoincrement())
+  factureId  Int
+  facture    Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  produitId  Int?
+  nomProduit String
+  unite      String  @default("pièce")
+  quantite   Int     @default(1)
+  prixUnit   Int
+}
+
+model Paiement {
+  id        Int      @id @default(autoincrement())
+  factureId Int
+  facture   Facture  @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  montant   Int
+  mode      String   @default("especes")
+  reference String?
+  note      String?
+  creeLe    DateTime @default(now())
+}
+
+model Livraison {
+  id         Int              @id @default(autoincrement())
+  numero     String           @unique
+  commandeId Int
+  commande   Commande         @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+  note       String?
+  creeLe     DateTime         @default(now())
+  lignes     LivraisonLigne[]
+}
+
+model LivraisonLigne {
+  id           Int       @id @default(autoincrement())
+  livraisonId  Int
+  livraison    Livraison @relation(fields: [livraisonId], references: [id], onDelete: Cascade)
+  produitId    Int?
+  nomProduit   String
+  unite        String    @default("pièce")
+  qteCommandee Int       @default(0)
+  qteLivree    Int       @default(0)
+}
+
+model Fournisseur {
+  id        Int      @id @default(autoincrement())
+  nom       String
+  contact   String?
+  telephone String?
+  email     String?
+  ville     String?
+  notes     String?
+  creeLe    DateTime @default(now())
+  achats    Achat[]
+}
+
+model Achat {
+  id            Int          @id @default(autoincrement())
+  numero        String       @unique
+  fournisseurId Int
+  fournisseur   Fournisseur  @relation(fields: [fournisseurId], references: [id])
+  statut        StatutAchat  @default(commande)
+  total         Int          @default(0)
+  note          String?
+  creeLe        DateTime     @default(now())
+  lignes        AchatLigne[]
+}
+
+model AchatLigne {
+  id            Int    @id @default(autoincrement())
+  achatId       Int
+  achat         Achat  @relation(fields: [achatId], references: [id], onDelete: Cascade)
+  produitId     Int?
+  nomProduit    String
+  quantite      Int    @default(1)
+  quantiteRecue Int    @default(0)
+  prixAchatUnit Int    @default(0)
+}
+
+model MouvementStock {
+  id        Int           @id @default(autoincrement())
+  produitId Int
+  produit   Produit       @relation(fields: [produitId], references: [id])
+  type      TypeMouvement
+  quantite  Int
+  note      String?
+  reference String?
+  creeLe    DateTime      @default(now())
+  @@index([produitId])
+}
+
+model ActiviteCrm {
+  id          Int          @id @default(autoincrement())
+  clientId    Int
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type        TypeActivite @default(note)
+  commentaire String?
+  faitParId   Int?
+  faitPar     Utilisateur? @relation(fields: [faitParId], references: [id])
+  creeLe      DateTime     @default(now())
+  @@index([clientId])
+}
+
+model Relance {
+  id          Int      @id @default(autoincrement())
+  clientId    Int
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  typeDoc     String   @default("proforma")
+  docId       Int?
+  datePrevue  DateTime
+  fait        Boolean  @default(false)
+  note        String?
+  creeLe      DateTime @default(now())
+  @@index([datePrevue])
+}
+
+model Parametre {
+  cle    String @id
+  valeur String?
+}
